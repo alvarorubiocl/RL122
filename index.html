@@ -19,7 +19,6 @@
         #error { color: #d32f2f; margin-top: 10px; font-weight: bold; }
         .deuda-valor { font-weight: bold; color: #d32f2f; }
         
-        /* Estilo para la nota de actualización basada en el archivo */
         .archivo-info { 
             margin-top: 25px; 
             font-size: 0.75rem; 
@@ -34,13 +33,11 @@
 
         async function cargarCSV() {
             try {
-                // El parámetro ?t= asegura que siempre leamos el archivo más reciente del servidor
                 const url = 'tesoreria.csv?t=' + Date.now();
                 const resp = await fetch(url);
                 
                 if (!resp.ok) throw new Error("No se pudo cargar el archivo");
 
-                // LEER FECHA DE MODIFICACIÓN DEL ARCHIVO DESDE EL SERVIDOR
                 const lastModifiedHeader = resp.headers.get('Last-Modified');
                 if (lastModifiedHeader) {
                     const fechaArchivo = new Date(lastModifiedHeader);
@@ -81,8 +78,14 @@
 
         init();
 
+        // Valida formato: números opcionales, puntos opcionales, guion obligatorio y dígito verificador (0-9 o K)
         function validarRut(r) {
-            return /^\d{7,9}$/.test(r);
+            return /^[0-9.]+-[0-9kK]{1}$/.test(r);
+        }
+
+        // Limpia el RUT para dejar solo números y la K (útil para buscar en el CSV)
+        function limpiarRutParaBusqueda(r) {
+            return r.replace(/[^0-9kK]/g, '').toUpperCase();
         }
 
         async function buscar() {
@@ -96,11 +99,18 @@
             outDiv.innerHTML = '';
 
             if (!validarRut(rutInput)) {
-                errorDiv.innerHTML = 'RUT inválido. Ingrese solo números sin puntos ni guion.';
+                errorDiv.innerHTML = 'Formato inválido. Ingrese RUT con guion y DV (ej: 12345678-K).';
                 return;
             }
 
-            const resultado = data.find(x => x.RUT === rutInput);
+            const rutLimpio = limpiarRutParaBusqueda(rutInput);
+            const soloNumeros = rutLimpio.slice(0, -1); // El RUT sin el dígito verificador
+
+            // Buscamos coincidencia con el RUT completo o solo la parte numérica (por si el CSV no tiene DV)
+            const resultado = data.find(x => {
+                const rutCsv = x.RUT.toString().trim().replace(/[^0-9kK]/g, '').toUpperCase();
+                return rutCsv === rutLimpio || rutCsv === soloNumeros;
+            });
 
             if (resultado) {
                 outDiv.innerHTML = `
@@ -128,7 +138,7 @@
 </header>
 
 <div class="container">
-    <input type="text" id="rut" placeholder="Ingrese RUT (ej: 13904636)" inputmode="numeric">
+    <input type="text" id="rut" placeholder="RUT con guion (ej: 13904636-7)" spellcheck="false">
     <button class="btn-buscar" onclick="buscar()">Consultar</button>
     <button class="btn-limpiar" onclick="limpiar()">Nueva Consulta</button>
     
