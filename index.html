@@ -1,28 +1,119 @@
-async function cargarCSV(){
-  try {
-    const resp = await fetch('tesoreria.csv?t=' + Date.now());
-    const txt = await resp.text();
-    // CORRECCIÓN: Usar \n para separar las filas del archivo
-    const filas = txt.trim().split("\n"); 
-    const headers = filas[0].split(";");
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consulta de Saldo - Logia 122</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f9; color: #333; }
+        header { text-align: center; padding: 20px; background-color: #fff; border-bottom: 3px solid #2c3e50; margin-bottom: 30px; }
+        .container { width: 90%; max-width: 500px; margin: auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h2 { font-size: 1.2rem; color: #2c3e50; margin-top: 10px; }
+        input { width: 100%; padding: 12px; margin: 10px 0; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; font-size: 16px; margin-top: 10px; cursor: pointer; border: none; border-radius: 4px; transition: 0.3s; }
+        .btn-buscar { background-color: #2c3e50; color: white; }
+        .btn-buscar:hover { background-color: #34495e; }
+        .btn-limpiar { background-color: #e0e0e0; color: #333; }
+        .btn-limpiar:hover { background-color: #d0d0d0; }
+        #out { margin-top: 20px; font-size: 18px; line-height: 1.6; border-top: 1px solid #eee; padding-top: 15px; }
+        #error { color: #d32f2f; margin-top: 10px; font-weight: bold; }
+        .deuda-valor { font-weight: bold; color: #d32f2f; }
+    </style>
+    <script>
+        let data = [];
+
+        async function cargarCSV() {
+            try {
+                // Se agrega un timestamp para evitar problemas de caché del navegador
+                const resp = await fetch('tesoreria.csv?t=' + Date.now());
+                const txt = await resp.text();
+                
+                // CORRECCIÓN: Usar \n para separar correctamente las filas del CSV 
+                const filas = txt.trim().split("\n");
+                const headers = filas[0].split(";").map(h => h.trim());
+                
+                const datosProcesados = filas.slice(1).map(row => {
+                    const columnas = row.split(";");
+                    let objeto = {};
+                    headers.forEach((h, i) => {
+                        objeto[h] = columnas[i] ? columnas[i].trim() : "";
+                    });
+                    
+                    // Convertir el saldo a número para lógica de deuda 
+                    let saldo = parseInt(objeto['Saldo Vencido']) || 0;
+                    objeto['Deuda Vencida'] = saldo > 0 ? saldo : 0;
+                    return objeto;
+                });
+                return datosProcesados;
+            } catch (e) {
+                console.error("Error al cargar la base de datos:", e);
+                document.getElementById('error').innerHTML = 'Error al conectar con la base de datos.';
+                return [];
+            }
+        }
+
+        async function init() {
+            data = await cargarCSV();
+        }
+
+        // Ejecutar carga al iniciar
+        init();
+
+        function validarRut(r) {
+            // Valida que sean solo números entre 7 y 9 dígitos 
+            return /^\d{7,9}$/.test(r);
+        }
+
+        async function buscar() {
+            if (data.length === 0) data = await cargarCSV();
+            
+            const rutInput = document.getElementById('rut').value.trim();
+            const errorDiv = document.getElementById('error');
+            const outDiv = document.getElementById('out');
+            
+            errorDiv.innerHTML = '';
+            outDiv.innerHTML = '';
+
+            if (!validarRut(rutInput)) {
+                errorDiv.innerHTML = 'RUT inválido. Ingrese solo números sin puntos ni guion.';
+                return;
+            }
+
+            const resultado = data.find(x => x.RUT === rutInput);
+
+            if (resultado) {
+                outDiv.innerHTML = `
+                    <strong>Nombre:</strong> ${resultado.Nombres} ${resultado['Apellido Paterno']}<br>
+                    <strong>Estado de Cuenta:</strong> <span class="deuda-valor">$${resultado['Deuda Vencida'].toLocaleString('es-CL')}</span>
+                `;
+            } else {
+                outDiv.innerHTML = '<span style="color: #666;">El RUT ingresado no se encuentra en los registros actuales.</span>';
+            }
+        }
+
+        function limpiar() {
+            document.getElementById('rut').value = '';
+            document.getElementById('error').innerHTML = '';
+            document.getElementById('out').innerHTML = '';
+        }
+    </script>
+</head>
+<body>
+
+<header>
+    <img width="120" src="Logo.jpg" alt="Logo Logia 122" onerror="this.style.display='none'">
+    <h2>Respetable Logia Adeodato García Valenzuela N°122</h2>
+    <p>Módulo de Consulta de Saldo</p>
+</header>
+
+<div class="container">
+    <input type="text" id="rut" placeholder="Ingrese RUT (ej: 13904636)" inputmode="numeric">
+    <button class="btn-buscar" onclick="buscar()">Consultar</button>
+    <button class="btn-limpiar" onclick="limpiar()">Nueva Consulta</button>
     
-    const datos = filas.slice(1).map(row => {
-      const c = row.split(";");
-      let o = {};
-      headers.forEach((h, i) => {
-        if (h) o[h.trim()] = c[i] ? c[i].trim() : "";
-      });
-      
-      // Convertimos el saldo a número
-      let saldoOriginal = parseInt(o['Saldo Vencido']) || 0;
-      // Tu lógica actual: si el saldo es negativo o cero, muestra 0 deuda
-      o['Deuda Vencida'] = saldoOriginal > 0 ? saldoOriginal : 0;
-      
-      return o;
-    });
-    return datos;
-  } catch (e) {
-    console.error("Error cargando el CSV:", e);
-    return [];
-  }
-}
+    <div id="error"></div>
+    <div id="out"></div>
+</div>
+
+</body>
+</html>
