@@ -84,7 +84,7 @@
             if (resultado) {
                 outDiv.innerHTML = `
                     <strong>Nombre:</strong> ${resultado.Nombres} ${resultado['Apellido Paterno']}<br>
-                    <strong>Estado de Cuenta:</strong> <span class="deuda-valor">$${resultado['Deuda Vencida'].toLocaleString('es-CL')}</span>
+                    <strong>Deuda Vencida:</strong> <span class="deuda-valor">$${resultado['Deuda Vencida'].toLocaleString('es-CL')}</span>
                 `;
             } else {
                 outDiv.innerHTML = '<span style="color: #666;">El RUT ingresado no se encuentra en los registros actuales.</span>';
