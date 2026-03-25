@@ -19,15 +19,14 @@
         #error { color: #d32f2f; margin-top: 10px; font-weight: bold; }
         .deuda-valor { font-weight: bold; color: #d32f2f; }
         
-        /* Estilo para la nota de actualización */
-        .footer-update { 
+        /* Estilo para la nota de actualización basada en el archivo */
+        .archivo-info { 
             margin-top: 25px; 
             font-size: 0.75rem; 
             color: #7f8c8d; 
             text-align: center; 
-            border-top: 1px solid #eee; 
+            border-top: 1px dashed #ccc; 
             padding-top: 15px;
-            font-style: italic;
         }
     </style>
     <script>
@@ -35,27 +34,25 @@
 
         async function cargarCSV() {
             try {
-                // Se agrega un timestamp para evitar problemas de caché
-                const resp = await fetch('tesoreria.csv?t=' + Date.now());
+                // El parámetro ?t= asegura que siempre leamos el archivo más reciente del servidor
+                const url = 'tesoreria.csv?t=' + Date.now();
+                const resp = await fetch(url);
                 
-                // Extraer fecha de última modificación del servidor
-                const lastModified = resp.headers.get('Last-Modified');
-                if (lastModified) {
-                    const fechaObj = new Date(lastModified);
+                if (!resp.ok) throw new Error("No se pudo cargar el archivo");
+
+                // LEER FECHA DE MODIFICACIÓN DEL ARCHIVO DESDE EL SERVIDOR
+                const lastModifiedHeader = resp.headers.get('Last-Modified');
+                if (lastModifiedHeader) {
+                    const fechaArchivo = new Date(lastModifiedHeader);
                     const opciones = { 
-                        day: '2-digit', 
-                        month: '2-digit', 
-                        year: 'numeric', 
-                        hour: '2-digit', 
-                        minute: '2-digit',
-                        second: '2-digit'
+                        day: '2-digit', month: '2-digit', year: 'numeric', 
+                        hour: '2-digit', minute: '2-digit' 
                     };
-                    document.getElementById('fecha-actualizacion').innerText = 
-                        "Última actualización: " + fechaObj.toLocaleString('es-CL', opciones);
+                    document.getElementById('info-csv').innerText = 
+                        "Datos actualizados al: " + fechaArchivo.toLocaleString('es-CL', opciones);
                 }
 
                 const txt = await resp.text();
-                
                 const filas = txt.trim().split("\n");
                 const headers = filas[0].split(";").map(h => h.trim());
                 
@@ -72,8 +69,8 @@
                 });
                 return datosProcesados;
             } catch (e) {
-                console.error("Error al cargar la base de datos:", e);
-                document.getElementById('error').innerHTML = 'Error al conectar con la base de datos.';
+                console.error("Error:", e);
+                document.getElementById('error').innerHTML = 'Error al conectar con la base de datos CSV.';
                 return [];
             }
         }
@@ -138,7 +135,7 @@
     <div id="error"></div>
     <div id="out"></div>
 
-    <div id="fecha-actualizacion" class="footer-update"></div>
+    <div id="info-csv" class="archivo-info">Cargando fecha de actualización...</div>
 </div>
 
 </body>
