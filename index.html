@@ -18,6 +18,7 @@
         #out { margin-top: 20px; font-size: 18px; line-height: 1.6; border-top: 1px solid #eee; padding-top: 15px; }
         #error { color: #d32f2f; margin-top: 10px; font-weight: bold; }
         .deuda-valor { font-weight: bold; color: #d32f2f; }
+        .pagos-valor { font-weight: bold; color: #2e7d32; }
         
         .archivo-info { 
             margin-top: 25px; 
@@ -60,6 +61,10 @@
                         objeto[h] = columnas[i] ? columnas[i].trim() : "";
                     });
                     
+                    // Nuevo: Capturar Pagos Realizados 2026
+                    let pagos = parseInt(objeto['Pagos realizados 2026']) || 0;
+                    objeto['Pagos Realizados'] = pagos;
+
                     let saldo = parseInt(objeto['Saldo Vencido']) || 0;
                     objeto['Deuda Vencida'] = saldo > 0 ? saldo : 0;
                     return objeto;
@@ -74,14 +79,11 @@
 
         async function init() {
             data = await cargarCSV();
-            // Asignar evento de formateo al input
             const rutInput = document.getElementById('rut');
             rutInput.addEventListener('input', formatearInputRut);
         }
 
         window.onload = init;
-
-        // --- FUNCIONES DE FORMATEO Y LIMPIEZA DEL RUT ---
 
         function limpiarRutParaProcesar(r) {
             if (!r) return "";
@@ -91,57 +93,31 @@
         function formatearRut(r) {
             let rutLimpio = limpiarRutParaProcesar(r);
             if (rutLimpio.length <= 1) return rutLimpio;
-
-            let result = rutLimpio.slice(-1);
-            if (rutLimpio.length > 1) {
-                result = "-" + result;
-            }
-
+            let result = "-" + rutLimpio.slice(-1);
             let cuerpo = rutLimpio.slice(0, -1);
-            
-            // Insertar puntos
             while (cuerpo.length > 3) {
                 result = "." + cuerpo.slice(-3) + result;
                 cuerpo = cuerpo.slice(0, -3);
             }
-            
-            if (cuerpo.length > 0) {
-                result = cuerpo + result;
-            }
-
+            if (cuerpo.length > 0) result = cuerpo + result;
             return result;
         }
 
-        // Función que se ejecuta en cada 'input' del usuario
         function formatearInputRut(e) {
             const input = e.target;
-            
-            // Guardar posición del cursor para no perderla tras el formateo
             let posCursor = input.selectionStart;
             let valorAntes = input.value;
-            let cantidadNumerosAntes = (valorAntes.match(/[0-9kK]/g) || []).length;
-
-            // Formatear valor
             const rutFormateado = formatearRut(input.value);
             input.value = rutFormateado;
-
-            // Ajustar posición del cursor si se agregaron puntos o guion
-            let cantidadNumerosDespues = (rutFormateado.match(/[0-9kK]/g) || []).length;
             if(posCursor === valorAntes.length) {
-                // Si estaba al final, dejarlo al final
                 input.setSelectionRange(input.value.length, input.value.length);
             } else {
-                // Lógica simple para intentar mantener el cursor cerca
-                // de donde el usuario estaba escribiendo
                 let dif = rutFormateado.length - valorAntes.length;
                 input.setSelectionRange(posCursor + dif, posCursor + dif);
             }
         }
 
-        // --- FIN FUNCIONES DE RUT ---
-
         function validarRutFormato(r) {
-            // Acepta números con puntos y guion (ej: 12.345.678-K)
             return /^[0-9]{1,2}(\.[0-9]{3}){2}-[0-9kK]{1}$/.test(r);
         }
 
@@ -171,6 +147,7 @@
             if (resultado) {
                 outDiv.innerHTML = `
                     <strong>Nombre:</strong> ${resultado.Nombres} ${resultado['Apellido Paterno']}<br>
+                    <strong>Pagos Realizados 2026:</strong> <span class="pagos-valor">$${resultado['Pagos Realizados'].toLocaleString('es-CL')}</span><br>
                     <strong>Deuda Vencida:</strong> <span class="deuda-valor">$${resultado['Deuda Vencida'].toLocaleString('es-CL')}</span>
                 `;
             } else {
