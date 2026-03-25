@@ -17,7 +17,6 @@
         .btn-limpiar:hover { background-color: #d0d0d0; }
         #out { margin-top: 20px; font-size: 18px; line-height: 1.6; border-top: 1px solid #eee; padding-top: 15px; }
         #error { color: #d32f2f; margin-top: 10px; font-weight: bold; }
-        .destaque { font-weight: bold; color: #2c3e50; }
         .pago-valor { font-weight: bold; color: #2e7d32; }
         .deuda-valor { font-weight: bold; color: #d32f2f; }
         
@@ -37,7 +36,7 @@
             try {
                 const url = 'tesoreria.csv?t=' + Date.now();
                 const resp = await fetch(url);
-                if (!resp.ok) throw new Error("No se pudo cargar el archivo");
+                if (!resp.ok) throw new Error("No se pudo cargar");
 
                 const lastModifiedHeader = resp.headers.get('Last-Modified');
                 if (lastModifiedHeader) {
@@ -48,90 +47,93 @@
 
                 const txt = await resp.text();
                 const filas = txt.trim().split("\n");
-                // La Columna E es el índice 4 (A=0, B=1, C=2, D=3, E=4)
-                const headers = filas[0].split(";").map(h => h.trim());
                 
                 return filas.slice(1).map(row => {
                     const columnas = row.split(";");
-                    let objeto = {};
-                    headers.forEach((h, i) => {
-                        objeto[h] = columnas[i] ? columnas[i].trim() : "";
-                    });
                     
-                    // Aseguramos la captura de la columna E explícitamente por posición si el nombre varía
-                    objeto['ColumnaE'] = columnas[4] ? columnas[4].trim() : "0";
+                    // Asignación por posición según tu archivo CSV
+                    // Col A (0): RUT | Col B (1): Apellido P | Col C (2): Nombres 
+                    // Col D (3): Pagos individuales | Col E (4): SUMA PAGOS | Col F (5): Saldo Vencido
+                    
+                    let rutOriginal = columnas[0] ? columnas[0].trim() : "";
+                    let apellido = columnas[1] ? columnas[1].trim() : "";
+                    let nombre = columnas[2] ? columnas[2].trim() : "";
+                    
+                    // Columna E (Indice 4): Suma de pagos realizados
+                    let pagosSumaVal = columnas[4] ? columnas[4].trim() : "0";
+                    let pagosSumaNum = parseInt(pagosSumaVal.replace(/\./g, '')) || 0;
 
-                    let saldo = parseInt(objeto['Saldo Vencido']) || 0;
-                    objeto['Deuda Vencida'] = saldo > 0 ? saldo : 0;
+                    // Columna F (Indice 5): Saldo Vencido
+                    let saldoVal = columnas[5] ? columnas[5].trim() : "0";
+                    let saldoNum = parseInt(saldoVal.replace(/\./g, '')) || 0;
                     
-                    let pagos = parseInt(objeto['Pagos Realizados 2026']) || 0;
-                    objeto['Pagos 2026'] = pagos;
-                    
-                    return objeto;
+                    return {
+                        rut: rutOriginal,
+                        nombreCompleto: `${nombre} ${apellido}`,
+                        pagos: pagosSumaNum,
+                        deuda: saldoNum
+                    };
                 });
             } catch (e) {
                 console.error("Error:", e);
-                document.getElementById('error').innerHTML = 'Error al conectar con la base de datos.';
+                document.getElementById('error').innerHTML = 'Error al leer la base de datos.';
                 return [];
             }
         }
 
-        function limpiarRutParaProcesar(r) {
+        function limpiarRut(r) {
             return r ? r.toString().replace(/[^0-9kK]/g, '').toUpperCase() : "";
         }
 
         function formatearRut(r) {
-            let rutLimpio = limpiarRutParaProcesar(r);
-            if (rutLimpio.length <= 1) return rutLimpio;
-            let result = "-" + rutLimpio.slice(-1);
-            let cuerpo = rutLimpio.slice(0, -1);
+            let s = limpiarRut(r);
+            if (s.length <= 1) return s;
+            let res = "-" + s.slice(-1);
+            let cuerpo = s.slice(0, -1);
             while (cuerpo.length > 3) {
-                result = "." + cuerpo.slice(-3) + result;
+                res = "." + cuerpo.slice(-3) + res;
                 cuerpo = cuerpo.slice(0, -3);
             }
-            return cuerpo + result;
+            return cuerpo + res;
         }
 
-        function formatearInputRut(e) {
-            const input = e.target;
-            let posCursor = input.selectionStart;
-            let valorAntes = input.value;
-            input.value = formatearRut(input.value);
-            let dif = input.value.length - valorAntes.length;
-            input.setSelectionRange(posCursor + dif, posCursor + dif);
+        function handleInput(e) {
+            let pos = e.target.selectionStart;
+            let val = e.target.value;
+            e.target.value = formatearRut(e.target.value);
+            let diff = e.target.value.length - val.length;
+            e.target.setSelectionRange(pos + diff, pos + diff);
         }
 
         async function buscar() {
             if (data.length === 0) data = await cargarCSV();
-            const rutInput = document.getElementById('rut').value.trim();
+            const input = document.getElementById('rut').value.trim();
             const errorDiv = document.getElementById('error');
             const outDiv = document.getElementById('out');
             
             errorDiv.innerHTML = '';
             outDiv.innerHTML = '';
 
-            if (limpiarRutParaProcesar(rutInput).length < 7) {
+            const buscado = limpiarRut(input);
+            if (buscado.length < 7) {
                 errorDiv.innerHTML = 'Ingrese un RUT válido.';
                 return;
             }
 
-            const rutBuscar = limpiarRutParaProcesar(rutInput);
-            const soloNumeros = rutBuscar.slice(0, -1);
-
-            const resultado = data.find(x => {
-                const rutCsv = limpiarRutParaProcesar(x.RUT);
-                return rutCsv === rutBuscar || rutCsv === soloNumeros;
+            const soloNum = buscado.slice(0, -1);
+            const encontrado = data.find(x => {
+                let r = limpiarRut(x.rut);
+                return r === buscado || r === soloNum;
             });
 
-            if (resultado) {
+            if (encontrado) {
                 outDiv.innerHTML = `
-                    <strong>Nombre:</strong> ${resultado.Nombres} ${resultado['Apellido Paterno']}<br>
-                    <strong>Cuotas (Columna E):</strong> <span class="destaque">${resultado['ColumnaE']}</span><br>
-                    <strong>Pagos Realizados 2026:</strong> <span class="pago-valor">$${(resultado['Pagos 2026'] || 0).toLocaleString('es-CL')}</span><br>
-                    <strong>Deuda Vencida:</strong> <span class="deuda-valor">$${resultado['Deuda Vencida'].toLocaleString('es-CL')}</span>
+                    <strong>Nombre:</strong> ${encontrado.nombreCompleto}<br>
+                    <strong>Pagos Realizados 2026:</strong> <span class="pago-valor">$${encontrado.pagos.toLocaleString('es-CL')}</span><br>
+                    <strong>Deuda Vencida:</strong> <span class="deuda-valor">$${encontrado.deuda.toLocaleString('es-CL')}</span>
                 `;
             } else {
-                outDiv.innerHTML = '<span style="color: #666;">El RUT no se encuentra en los registros.</span>';
+                outDiv.innerHTML = '<span style="color: #666;">RUT no encontrado.</span>';
             }
         }
 
@@ -143,14 +145,14 @@
 
         window.onload = async () => {
             data = await cargarCSV();
-            document.getElementById('rut').addEventListener('input', formatearInputRut);
+            document.getElementById('rut').addEventListener('input', handleInput);
         };
     </script>
 </head>
 <body>
 
 <header>
-    <img width="120" src="Logo.jpg" alt="Logo Logia 122" onerror="this.style.display='none'">
+    <img width="120" src="Logo.jpg" alt="Logo" onerror="this.style.display='none'">
     <h2>Respetable Logia Adeodato García Valenzuela N°122</h2>
     <p>Módulo de Consulta de Saldo</p>
 </header>
@@ -163,7 +165,7 @@
     <div id="error"></div>
     <div id="out"></div>
 
-    <div id="info-csv" class="archivo-info">Cargando fecha de actualización...</div>
+    <div id="info-csv" class="archivo-info">Cargando datos...</div>
 </div>
 
 </body>
