@@ -1,60 +1,28 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset='UTF-8'>
-<meta name='viewport' content='width=device-width, initial-scale=1.0'>
-<title>Consulta Logia 122</title>
-<style>
-body{font-family:Arial;margin:0;padding:0;}
-header{text-align:center;margin-bottom:20px;padding:10px;}
-.container{width:90%;max-width:500px;margin:auto;}
-input,button{width:100%;padding:12px;margin-top:5px;font-size:18px;}
-#error{color:red;margin-top:10px;}
-</style>
-<script>
 async function cargarCSV(){
- const resp=await fetch('tesoreria.csv?t='+Date.now());
- const txt=await resp.text();
- const lineas=txt.trim().split("
-");
- const headers=lineas[0].split(";");
- const data=lineas.slice(1).map(l=>{
-   const c=l.split(";");
-   let o={};
-   headers.forEach((h,i)=>o[h.trim()]=c[i].trim());
-   o['Saldo Vencido']=parseInt(o['Saldo Vencido'])>0?parseInt(o['Saldo Vencido']):0;
-   o['Deuda Vencida']=o['Saldo Vencido'];
-   return o;
- });
- return data;
+  try {
+    const resp = await fetch('tesoreria.csv?t=' + Date.now());
+    const txt = await resp.text();
+    // CORRECCIÓN: Usar \n para separar las filas del archivo
+    const filas = txt.trim().split("\n"); 
+    const headers = filas[0].split(";");
+    
+    const datos = filas.slice(1).map(row => {
+      const c = row.split(";");
+      let o = {};
+      headers.forEach((h, i) => {
+        if (h) o[h.trim()] = c[i] ? c[i].trim() : "";
+      });
+      
+      // Convertimos el saldo a número
+      let saldoOriginal = parseInt(o['Saldo Vencido']) || 0;
+      // Tu lógica actual: si el saldo es negativo o cero, muestra 0 deuda
+      o['Deuda Vencida'] = saldoOriginal > 0 ? saldoOriginal : 0;
+      
+      return o;
+    });
+    return datos;
+  } catch (e) {
+    console.error("Error cargando el CSV:", e);
+    return [];
+  }
 }
-let data=[];
-async function init(){ data=await cargarCSV(); }
-init();
-function validarRut(r){ return /^\d{7,9}$/.test(r); }
-async function buscar(){
- if(data.length===0) data=await cargarCSV();
- var r=document.getElementById('rut').value;
- document.getElementById('error').innerHTML='';
- if(!validarRut(r)){ document.getElementById('error').innerHTML='RUT inválido'; return; }
- var res=data.find(x=>x.RUT==r);
- if(res){ document.getElementById('out').innerHTML='Nombre: '+res.Nombres+' '+res['Apellido Paterno']+'<br>Deuda Vencida: '+res['Deuda Vencida']; }
- else{ document.getElementById('out').innerHTML='No encontrado'; }
-}
-function limpiar(){ document.getElementById('rut').value=''; document.getElementById('error').innerHTML=''; document.getElementById('out').innerHTML=''; }
-</script>
-</head>
-<body>
-<header>
-<img width='120' src='Logo.jpg'>
-<h2>Respetable Logia Adeodato García Valenzuela N°122 - Consulta de Deuda</h2>
-</header>
-<div class='container'>
-<input id='rut' placeholder='Ingrese RUT'>
-<button onclick='buscar()'>Buscar</button>
-<button onclick='limpiar()'>Reiniciar</button>
-<div id='error'></div>
-<div id='out'></div>
-</div>
-</body>
-</html>
