@@ -18,8 +18,8 @@
         #out { margin-top: 20px; font-size: 18px; line-height: 1.6; border-top: 1px solid #eee; padding-top: 15px; }
         #error { color: #d32f2f; margin-top: 10px; font-weight: bold; }
         .destaque { font-weight: bold; color: #2c3e50; }
-        .pago-valor { font-weight: bold; color: #2e7d32; } /* Verde para pagos */
-        .deuda-valor { font-weight: bold; color: #d32f2f; } /* Rojo para deuda */
+        .pago-valor { font-weight: bold; color: #2e7d32; }
+        .deuda-valor { font-weight: bold; color: #d32f2f; }
         
         .archivo-info { 
             margin-top: 25px; 
@@ -48,6 +48,7 @@
 
                 const txt = await resp.text();
                 const filas = txt.trim().split("\n");
+                // La Columna E es el índice 4 (A=0, B=1, C=2, D=3, E=4)
                 const headers = filas[0].split(";").map(h => h.trim());
                 
                 return filas.slice(1).map(row => {
@@ -57,7 +58,9 @@
                         objeto[h] = columnas[i] ? columnas[i].trim() : "";
                     });
                     
-                    // Procesar valores numéricos
+                    // Aseguramos la captura de la columna E explícitamente por posición si el nombre varía
+                    objeto['ColumnaE'] = columnas[4] ? columnas[4].trim() : "0";
+
                     let saldo = parseInt(objeto['Saldo Vencido']) || 0;
                     objeto['Deuda Vencida'] = saldo > 0 ? saldo : 0;
                     
@@ -107,8 +110,8 @@
             errorDiv.innerHTML = '';
             outDiv.innerHTML = '';
 
-            if (limpiarRutParaProcesar(rutInput).length < 8) {
-                errorDiv.innerHTML = 'Ingrese un RUT válido para consultar.';
+            if (limpiarRutParaProcesar(rutInput).length < 7) {
+                errorDiv.innerHTML = 'Ingrese un RUT válido.';
                 return;
             }
 
@@ -123,7 +126,7 @@
             if (resultado) {
                 outDiv.innerHTML = `
                     <strong>Nombre:</strong> ${resultado.Nombres} ${resultado['Apellido Paterno']}<br>
-                    <strong>Cuotas:</strong> <span class="destaque">${resultado['Cuotas'] || '0'}</span><br>
+                    <strong>Cuotas (Columna E):</strong> <span class="destaque">${resultado['ColumnaE']}</span><br>
                     <strong>Pagos Realizados 2026:</strong> <span class="pago-valor">$${(resultado['Pagos 2026'] || 0).toLocaleString('es-CL')}</span><br>
                     <strong>Deuda Vencida:</strong> <span class="deuda-valor">$${resultado['Deuda Vencida'].toLocaleString('es-CL')}</span>
                 `;
