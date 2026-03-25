@@ -74,18 +74,75 @@
 
         async function init() {
             data = await cargarCSV();
+            // Asignar evento de formateo al input
+            const rutInput = document.getElementById('rut');
+            rutInput.addEventListener('input', formatearInputRut);
         }
 
-        init();
+        window.onload = init;
 
-        // Valida formato: números opcionales, puntos opcionales, guion obligatorio y dígito verificador (0-9 o K)
-        function validarRut(r) {
-            return /^[0-9.]+-[0-9kK]{1}$/.test(r);
+        // --- FUNCIONES DE FORMATEO Y LIMPIEZA DEL RUT ---
+
+        function limpiarRutParaProcesar(r) {
+            if (!r) return "";
+            return r.toString().replace(/[^0-9kK]/g, '').toUpperCase();
         }
 
-        // Limpia el RUT para dejar solo números y la K (útil para buscar en el CSV)
-        function limpiarRutParaBusqueda(r) {
-            return r.replace(/[^0-9kK]/g, '').toUpperCase();
+        function formatearRut(r) {
+            let rutLimpio = limpiarRutParaProcesar(r);
+            if (rutLimpio.length <= 1) return rutLimpio;
+
+            let result = rutLimpio.slice(-1);
+            if (rutLimpio.length > 1) {
+                result = "-" + result;
+            }
+
+            let cuerpo = rutLimpio.slice(0, -1);
+            
+            // Insertar puntos
+            while (cuerpo.length > 3) {
+                result = "." + cuerpo.slice(-3) + result;
+                cuerpo = cuerpo.slice(0, -3);
+            }
+            
+            if (cuerpo.length > 0) {
+                result = cuerpo + result;
+            }
+
+            return result;
+        }
+
+        // Función que se ejecuta en cada 'input' del usuario
+        function formatearInputRut(e) {
+            const input = e.target;
+            
+            // Guardar posición del cursor para no perderla tras el formateo
+            let posCursor = input.selectionStart;
+            let valorAntes = input.value;
+            let cantidadNumerosAntes = (valorAntes.match(/[0-9kK]/g) || []).length;
+
+            // Formatear valor
+            const rutFormateado = formatearRut(input.value);
+            input.value = rutFormateado;
+
+            // Ajustar posición del cursor si se agregaron puntos o guion
+            let cantidadNumerosDespues = (rutFormateado.match(/[0-9kK]/g) || []).length;
+            if(posCursor === valorAntes.length) {
+                // Si estaba al final, dejarlo al final
+                input.setSelectionRange(input.value.length, input.value.length);
+            } else {
+                // Lógica simple para intentar mantener el cursor cerca
+                // de donde el usuario estaba escribiendo
+                let dif = rutFormateado.length - valorAntes.length;
+                input.setSelectionRange(posCursor + dif, posCursor + dif);
+            }
+        }
+
+        // --- FIN FUNCIONES DE RUT ---
+
+        function validarRutFormato(r) {
+            // Acepta números con puntos y guion (ej: 12.345.678-K)
+            return /^[0-9]{1,2}(\.[0-9]{3}){2}-[0-9kK]{1}$/.test(r);
         }
 
         async function buscar() {
@@ -98,18 +155,17 @@
             errorDiv.innerHTML = '';
             outDiv.innerHTML = '';
 
-            if (!validarRut(rutInput)) {
-                errorDiv.innerHTML = 'Formato inválido. Ingrese RUT con guion y DV (ej: 12345678-K).';
+            if (!validarRutFormato(rutInput)) {
+                errorDiv.innerHTML = 'Formato inválido. Espere a que se autocomplete el formato 12.345.678-K.';
                 return;
             }
 
-            const rutLimpio = limpiarRutParaBusqueda(rutInput);
-            const soloNumeros = rutLimpio.slice(0, -1); // El RUT sin el dígito verificador
+            const rutBuscar = limpiarRutParaProcesar(rutInput);
+            const soloNumeros = rutBuscar.slice(0, -1);
 
-            // Buscamos coincidencia con el RUT completo o solo la parte numérica (por si el CSV no tiene DV)
             const resultado = data.find(x => {
-                const rutCsv = x.RUT.toString().trim().replace(/[^0-9kK]/g, '').toUpperCase();
-                return rutCsv === rutLimpio || rutCsv === soloNumeros;
+                const rutCsv = limpiarRutParaProcesar(x.RUT);
+                return rutCsv === rutBuscar || rutCsv === soloNumeros;
             });
 
             if (resultado) {
@@ -138,7 +194,7 @@
 </header>
 
 <div class="container">
-    <input type="text" id="rut" placeholder="RUT con guion (ej: 13904636-7)" spellcheck="false">
+    <input type="text" id="rut" placeholder="RUT (ej: 12.345.678-K)" spellcheck="false">
     <button class="btn-buscar" onclick="buscar()">Consultar</button>
     <button class="btn-limpiar" onclick="limpiar()">Nueva Consulta</button>
     
