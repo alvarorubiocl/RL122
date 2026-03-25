@@ -17,6 +17,7 @@
         .btn-limpiar:hover { background-color: #d0d0d0; }
         #out { margin-top: 20px; font-size: 18px; line-height: 1.6; border-top: 1px solid #eee; padding-top: 15px; }
         #error { color: #d32f2f; margin-top: 10px; font-weight: bold; }
+        .destaque { font-weight: bold; color: #2c3e50; }
         .deuda-valor { font-weight: bold; color: #d32f2f; }
         
         .archivo-info { 
@@ -35,119 +36,64 @@
             try {
                 const url = 'tesoreria.csv?t=' + Date.now();
                 const resp = await fetch(url);
-                
                 if (!resp.ok) throw new Error("No se pudo cargar el archivo");
 
                 const lastModifiedHeader = resp.headers.get('Last-Modified');
                 if (lastModifiedHeader) {
                     const fechaArchivo = new Date(lastModifiedHeader);
-                    const opciones = { 
-                        day: '2-digit', month: '2-digit', year: 'numeric', 
-                        hour: '2-digit', minute: '2-digit' 
-                    };
-                    document.getElementById('info-csv').innerText = 
-                        "Datos actualizados al: " + fechaArchivo.toLocaleString('es-CL', opciones);
+                    const opciones = { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+                    document.getElementById('info-csv').innerText = "Datos actualizados al: " + fechaArchivo.toLocaleString('es-CL', opciones);
                 }
 
                 const txt = await resp.text();
                 const filas = txt.trim().split("\n");
                 const headers = filas[0].split(";").map(h => h.trim());
                 
-                const datosProcesados = filas.slice(1).map(row => {
+                return filas.slice(1).map(row => {
                     const columnas = row.split(";");
                     let objeto = {};
                     headers.forEach((h, i) => {
                         objeto[h] = columnas[i] ? columnas[i].trim() : "";
                     });
-                    
+                    // Procesar saldo numérico
                     let saldo = parseInt(objeto['Saldo Vencido']) || 0;
                     objeto['Deuda Vencida'] = saldo > 0 ? saldo : 0;
                     return objeto;
                 });
-                return datosProcesados;
             } catch (e) {
                 console.error("Error:", e);
-                document.getElementById('error').innerHTML = 'Error al conectar con la base de datos CSV.';
+                document.getElementById('error').innerHTML = 'Error al conectar con la base de datos.';
                 return [];
             }
         }
 
-        async function init() {
-            data = await cargarCSV();
-            // Asignar evento de formateo al input
-            const rutInput = document.getElementById('rut');
-            rutInput.addEventListener('input', formatearInputRut);
-        }
-
-        window.onload = init;
-
-        // --- FUNCIONES DE FORMATEO Y LIMPIEZA DEL RUT ---
-
         function limpiarRutParaProcesar(r) {
-            if (!r) return "";
-            return r.toString().replace(/[^0-9kK]/g, '').toUpperCase();
+            return r ? r.toString().replace(/[^0-9kK]/g, '').toUpperCase() : "";
         }
 
         function formatearRut(r) {
             let rutLimpio = limpiarRutParaProcesar(r);
             if (rutLimpio.length <= 1) return rutLimpio;
-
-            let result = rutLimpio.slice(-1);
-            if (rutLimpio.length > 1) {
-                result = "-" + result;
-            }
-
+            let result = "-" + rutLimpio.slice(-1);
             let cuerpo = rutLimpio.slice(0, -1);
-            
-            // Insertar puntos
             while (cuerpo.length > 3) {
                 result = "." + cuerpo.slice(-3) + result;
                 cuerpo = cuerpo.slice(0, -3);
             }
-            
-            if (cuerpo.length > 0) {
-                result = cuerpo + result;
-            }
-
-            return result;
+            return cuerpo + result;
         }
 
-        // Función que se ejecuta en cada 'input' del usuario
         function formatearInputRut(e) {
             const input = e.target;
-            
-            // Guardar posición del cursor para no perderla tras el formateo
             let posCursor = input.selectionStart;
             let valorAntes = input.value;
-            let cantidadNumerosAntes = (valorAntes.match(/[0-9kK]/g) || []).length;
-
-            // Formatear valor
-            const rutFormateado = formatearRut(input.value);
-            input.value = rutFormateado;
-
-            // Ajustar posición del cursor si se agregaron puntos o guion
-            let cantidadNumerosDespues = (rutFormateado.match(/[0-9kK]/g) || []).length;
-            if(posCursor === valorAntes.length) {
-                // Si estaba al final, dejarlo al final
-                input.setSelectionRange(input.value.length, input.value.length);
-            } else {
-                // Lógica simple para intentar mantener el cursor cerca
-                // de donde el usuario estaba escribiendo
-                let dif = rutFormateado.length - valorAntes.length;
-                input.setSelectionRange(posCursor + dif, posCursor + dif);
-            }
-        }
-
-        // --- FIN FUNCIONES DE RUT ---
-
-        function validarRutFormato(r) {
-            // Acepta números con puntos y guion (ej: 12.345.678-K)
-            return /^[0-9]{1,2}(\.[0-9]{3}){2}-[0-9kK]{1}$/.test(r);
+            input.value = formatearRut(input.value);
+            let dif = input.value.length - valorAntes.length;
+            input.setSelectionRange(posCursor + dif, posCursor + dif);
         }
 
         async function buscar() {
             if (data.length === 0) data = await cargarCSV();
-            
             const rutInput = document.getElementById('rut').value.trim();
             const errorDiv = document.getElementById('error');
             const outDiv = document.getElementById('out');
@@ -155,8 +101,9 @@
             errorDiv.innerHTML = '';
             outDiv.innerHTML = '';
 
-            if (!validarRutFormato(rutInput)) {
-                errorDiv.innerHTML = 'Formato inválido. Espere a que se autocomplete el formato 12.345.678-K.';
+            // Validación básica de longitud mínima para un RUT chileno (ej: 1.111.111-1)
+            if (limpiarRutParaProcesar(rutInput).length < 8) {
+                errorDiv.innerHTML = 'Ingrese un RUT válido con puntos y guion.';
                 return;
             }
 
@@ -171,10 +118,11 @@
             if (resultado) {
                 outDiv.innerHTML = `
                     <strong>Nombre:</strong> ${resultado.Nombres} ${resultado['Apellido Paterno']}<br>
+                    <strong>Cuotas:</strong> <span class="destaque">${resultado['Cuotas'] || '0'}</span><br>
                     <strong>Deuda Vencida:</strong> <span class="deuda-valor">$${resultado['Deuda Vencida'].toLocaleString('es-CL')}</span>
                 `;
             } else {
-                outDiv.innerHTML = '<span style="color: #666;">El RUT ingresado no se encuentra en los registros actuales.</span>';
+                outDiv.innerHTML = '<span style="color: #666;">El RUT no se encuentra en los registros.</span>';
             }
         }
 
@@ -183,6 +131,11 @@
             document.getElementById('error').innerHTML = '';
             document.getElementById('out').innerHTML = '';
         }
+
+        window.onload = async () => {
+            data = await cargarCSV();
+            document.getElementById('rut').addEventListener('input', formatearInputRut);
+        };
     </script>
 </head>
 <body>
