@@ -17,9 +17,9 @@
         .btn-limpiar:hover { background-color: #d0d0d0; }
         #out { margin-top: 20px; font-size: 18px; line-height: 1.6; border-top: 1px solid #eee; padding-top: 15px; }
         #error { color: #d32f2f; margin-top: 10px; font-weight: bold; }
-        .pago-valor { font-weight: bold; color: #2e7d32; }
         .deuda-valor { font-weight: bold; color: #d32f2f; }
         
+        /* Estilo para la nota de actualización basada en el archivo */
         .archivo-info { 
             margin-top: 25px; 
             font-size: 0.75rem; 
@@ -34,106 +34,81 @@
 
         async function cargarCSV() {
             try {
+                // El parámetro ?t= asegura que siempre leamos el archivo más reciente del servidor
                 const url = 'tesoreria.csv?t=' + Date.now();
                 const resp = await fetch(url);
-                if (!resp.ok) throw new Error("No se pudo cargar");
+                
+                if (!resp.ok) throw new Error("No se pudo cargar el archivo");
 
+                // LEER FECHA DE MODIFICACIÓN DEL ARCHIVO DESDE EL SERVIDOR
                 const lastModifiedHeader = resp.headers.get('Last-Modified');
                 if (lastModifiedHeader) {
                     const fechaArchivo = new Date(lastModifiedHeader);
-                    const opciones = { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' };
-                    document.getElementById('info-csv').innerText = "Datos actualizados al: " + fechaArchivo.toLocaleString('es-CL', opciones);
+                    const opciones = { 
+                        day: '2-digit', month: '2-digit', year: 'numeric', 
+                        hour: '2-digit', minute: '2-digit' 
+                    };
+                    document.getElementById('info-csv').innerText = 
+                        "Datos actualizados al: " + fechaArchivo.toLocaleString('es-CL', opciones);
                 }
 
                 const txt = await resp.text();
                 const filas = txt.trim().split("\n");
+                const headers = filas[0].split(";").map(h => h.trim());
                 
-                return filas.slice(1).map(row => {
+                const datosProcesados = filas.slice(1).map(row => {
                     const columnas = row.split(";");
+                    let objeto = {};
+                    headers.forEach((h, i) => {
+                        objeto[h] = columnas[i] ? columnas[i].trim() : "";
+                    });
                     
-                    // Asignación por posición según tu archivo CSV
-                    // Col A (0): RUT | Col B (1): Apellido P | Col C (2): Nombres 
-                    // Col D (3): Pagos individuales | Col E (4): SUMA PAGOS | Col F (5): Saldo Vencido
-                    
-                    let rutOriginal = columnas[0] ? columnas[0].trim() : "";
-                    let apellido = columnas[1] ? columnas[1].trim() : "";
-                    let nombre = columnas[2] ? columnas[2].trim() : "";
-                    
-                    // Columna E (Indice 4): Suma de pagos realizados
-                    let pagosSumaVal = columnas[4] ? columnas[4].trim() : "0";
-                    let pagosSumaNum = parseInt(pagosSumaVal.replace(/\./g, '')) || 0;
-
-                    // Columna F (Indice 5): Saldo Vencido
-                    let saldoVal = columnas[5] ? columnas[5].trim() : "0";
-                    let saldoNum = parseInt(saldoVal.replace(/\./g, '')) || 0;
-                    
-                    return {
-                        rut: rutOriginal,
-                        nombreCompleto: `${nombre} ${apellido}`,
-                        pagos: pagosSumaNum,
-                        deuda: saldoNum
-                    };
+                    let saldo = parseInt(objeto['Saldo Vencido']) || 0;
+                    objeto['Deuda Vencida'] = saldo > 0 ? saldo : 0;
+                    return objeto;
                 });
+                return datosProcesados;
             } catch (e) {
                 console.error("Error:", e);
-                document.getElementById('error').innerHTML = 'Error al leer la base de datos.';
+                document.getElementById('error').innerHTML = 'Error al conectar con la base de datos CSV.';
                 return [];
             }
         }
 
-        function limpiarRut(r) {
-            return r ? r.toString().replace(/[^0-9kK]/g, '').toUpperCase() : "";
+        async function init() {
+            data = await cargarCSV();
         }
 
-        function formatearRut(r) {
-            let s = limpiarRut(r);
-            if (s.length <= 1) return s;
-            let res = "-" + s.slice(-1);
-            let cuerpo = s.slice(0, -1);
-            while (cuerpo.length > 3) {
-                res = "." + cuerpo.slice(-3) + res;
-                cuerpo = cuerpo.slice(0, -3);
-            }
-            return cuerpo + res;
-        }
+        init();
 
-        function handleInput(e) {
-            let pos = e.target.selectionStart;
-            let val = e.target.value;
-            e.target.value = formatearRut(e.target.value);
-            let diff = e.target.value.length - val.length;
-            e.target.setSelectionRange(pos + diff, pos + diff);
+        function validarRut(r) {
+            return /^\d{7,9}$/.test(r);
         }
 
         async function buscar() {
             if (data.length === 0) data = await cargarCSV();
-            const input = document.getElementById('rut').value.trim();
+            
+            const rutInput = document.getElementById('rut').value.trim();
             const errorDiv = document.getElementById('error');
             const outDiv = document.getElementById('out');
             
             errorDiv.innerHTML = '';
             outDiv.innerHTML = '';
 
-            const buscado = limpiarRut(input);
-            if (buscado.length < 7) {
-                errorDiv.innerHTML = 'Ingrese un RUT válido.';
+            if (!validarRut(rutInput)) {
+                errorDiv.innerHTML = 'RUT inválido. Ingrese solo números sin puntos ni guion.';
                 return;
             }
 
-            const soloNum = buscado.slice(0, -1);
-            const encontrado = data.find(x => {
-                let r = limpiarRut(x.rut);
-                return r === buscado || r === soloNum;
-            });
+            const resultado = data.find(x => x.RUT === rutInput);
 
-            if (encontrado) {
+            if (resultado) {
                 outDiv.innerHTML = `
-                    <strong>Nombre:</strong> ${encontrado.nombreCompleto}<br>
-                    <strong>Pagos Realizados 2026:</strong> <span class="pago-valor">$${encontrado.pagos.toLocaleString('es-CL')}</span><br>
-                    <strong>Deuda Vencida:</strong> <span class="deuda-valor">$${encontrado.deuda.toLocaleString('es-CL')}</span>
+                    <strong>Nombre:</strong> ${resultado.Nombres} ${resultado['Apellido Paterno']}<br>
+                    <strong>Deuda Vencida:</strong> <span class="deuda-valor">$${resultado['Deuda Vencida'].toLocaleString('es-CL')}</span>
                 `;
             } else {
-                outDiv.innerHTML = '<span style="color: #666;">RUT no encontrado.</span>';
+                outDiv.innerHTML = '<span style="color: #666;">El RUT ingresado no se encuentra en los registros actuales.</span>';
             }
         }
 
@@ -142,30 +117,25 @@
             document.getElementById('error').innerHTML = '';
             document.getElementById('out').innerHTML = '';
         }
-
-        window.onload = async () => {
-            data = await cargarCSV();
-            document.getElementById('rut').addEventListener('input', handleInput);
-        };
     </script>
 </head>
 <body>
 
 <header>
-    <img width="120" src="Logo.jpg" alt="Logo" onerror="this.style.display='none'">
+    <img width="120" src="Logo.jpg" alt="Logo Logia 122" onerror="this.style.display='none'">
     <h2>Respetable Logia Adeodato García Valenzuela N°122</h2>
     <p>Módulo de Consulta de Saldo</p>
 </header>
 
 <div class="container">
-    <input type="text" id="rut" placeholder="RUT (ej: 12.345.678-K)" spellcheck="false">
+    <input type="text" id="rut" placeholder="Ingrese RUT (ej: 13904636)" inputmode="numeric">
     <button class="btn-buscar" onclick="buscar()">Consultar</button>
     <button class="btn-limpiar" onclick="limpiar()">Nueva Consulta</button>
     
     <div id="error"></div>
     <div id="out"></div>
 
-    <div id="info-csv" class="archivo-info">Cargando datos...</div>
+    <div id="info-csv" class="archivo-info">Cargando fecha de actualización...</div>
 </div>
 
 </body>
